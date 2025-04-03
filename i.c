@@ -3,42 +3,11 @@
 #include <string.h>
 
 #define MAX_COURSES 10
-#define MAX_EMPLOYEES 50
 
 char admin[] = "admin";
 int adminpass = 123;
 
-/* Screen and utility functions */
-void clearScreen();
-void pauseSystem();
-
-/* File handling functions */
-void loadCourses();
-void saveCourses();
-int checkEmployeeLogin(char *name, char *pass);
-
-/* Employee management */
-void addNewEmployee();
-void viewEmployeeList();
-void removeEmployee();
-
-/* Course management */
-void addNewCourse();
-void viewAllCourse();
-void deleteACourse();
-
-/* Student management */
-void EnrollStudent();
-void viewWaitlistedStudent();
-
-/* Interface functions */
-void mainInterface();
-void adminInterface();
-void employeeInterface();
-void guestInterface();
-// process Waitlist
-void processWaitlist();
-
+// Structure definitions
 typedef struct Employee
 {
     char name[20];
@@ -46,6 +15,7 @@ typedef struct Employee
     char pass[8];
     char course[25];
     char dept[20];
+    struct Employee *next;
 } Employee;
 
 typedef struct Student
@@ -72,9 +42,35 @@ typedef struct WaitlistedStudent
     char dept[20];
 } WaitlistedStudent;
 
+// Global variables
 Course courses[MAX_COURSES];
 int courseCount = 0;
+Employee *employeeList = NULL;
 
+// Function prototypes
+void clearScreen();
+void pauseSystem();
+void loadCourses();
+void saveCourses();
+void loadEmployeesFromFile();
+void saveEmployeesToFile();
+void freeEmployeeList();
+int checkEmployeeLogin(char *name, char *pass);
+void addNewEmployee();
+void viewEmployeeList();
+void removeEmployee();
+void addNewCourse();
+void viewAllCourse();
+void deleteACourse();
+void EnrollStudent();
+void viewWaitlistedStudent();
+void processWaitlist();
+void mainInterface();
+void adminInterface();
+void employeeInterface();
+void guestInterface();
+
+// Utility functions
 void clearScreen()
 {
 #ifdef _WIN32
@@ -92,25 +88,7 @@ void pauseSystem()
     getchar();
 }
 
-int checkEmployeeLogin(char *name, char *pass)
-{
-    FILE *file = fopen("login_info.txt", "r");
-    if (file == NULL)
-        return 0;
-
-    char file_name[20], file_pass[8];
-    while (fscanf(file, "%s %s", file_name, file_pass) == 2)
-    {
-        if (strcmp(name, file_name) == 0 && strcmp(pass, file_pass) == 0)
-        {
-            fclose(file);
-            return 1;
-        }
-    }
-    fclose(file);
-    return 0;
-}
-
+// Course management
 void loadCourses()
 {
     FILE *file = fopen("courses.dat", "rb");
@@ -131,41 +109,116 @@ void saveCourses()
     }
 }
 
+// Employee management
+void loadEmployeesFromFile()
+{
+    FILE *file = fopen("employees.dat", "rb");
+    if (!file)
+        return;
+
+    Employee temp, *newEmp, *prev = NULL;
+    while (fread(&temp, sizeof(Employee), 1, file))
+    {
+        newEmp = (Employee *)malloc(sizeof(Employee));
+        *newEmp = temp;
+        newEmp->next = NULL;
+
+        if (!employeeList)
+        {
+            employeeList = newEmp;
+        }
+        else
+        {
+            prev->next = newEmp;
+        }
+        prev = newEmp;
+    }
+    fclose(file);
+}
+
+void saveEmployeesToFile()
+{
+    FILE *file = fopen("employees.dat", "wb");
+    if (!file)
+        return;
+
+    Employee *current = employeeList;
+    while (current)
+    {
+        fwrite(current, sizeof(Employee), 1, file);
+        current = current->next;
+    }
+    fclose(file);
+}
+
+void freeEmployeeList()
+{
+    Employee *current = employeeList;
+    while (current)
+    {
+        Employee *temp = current;
+        current = current->next;
+        free(temp);
+    }
+    employeeList = NULL;
+}
+
+int checkEmployeeLogin(char *name, char *pass)
+{
+    Employee *current = employeeList;
+    while (current)
+    {
+        if (strcmp(current->name, name) == 0 &&
+            strcmp(current->pass, pass) == 0)
+        {
+            return 1;
+        }
+        current = current->next;
+    }
+    return 0;
+}
+
 void addNewEmployee()
 {
-    Employee e1;
+    Employee *newEmp = (Employee *)malloc(sizeof(Employee));
+    if (!newEmp)
+    {
+        printf("Memory allocation failed!\n");
+        return;
+    }
+
     printf("\nEnter Name: ");
-    scanf("%19s", e1.name);
+    scanf("%19s", newEmp->name);
     printf("Enter ID: ");
-    scanf("%14s", e1.id);
+    scanf("%14s", newEmp->id);
     printf("Enter Password: ");
-    scanf("%7s", e1.pass);
+    scanf("%7s", newEmp->pass);
     printf("Enter Course: ");
-    scanf("%24s", e1.course);
+    scanf("%24s", newEmp->course);
     printf("Enter Department: ");
-    scanf("%19s", e1.dept);
+    scanf("%19s", newEmp->dept);
 
-    FILE *file = fopen("employees.txt", "a");
-    if (file)
+    newEmp->next = NULL;
+
+    if (!employeeList)
     {
-        fprintf(file, "%s %s %s %s\n", e1.name, e1.id, e1.course, e1.dept);
-        fclose(file);
+        employeeList = newEmp;
+    }
+    else
+    {
+        Employee *temp = employeeList;
+        while (temp->next)
+            temp = temp->next;
+        temp->next = newEmp;
     }
 
-    FILE *loginFile = fopen("login_info.txt", "a");
-    if (loginFile)
-    {
-        fprintf(loginFile, "%s %s\n", e1.name, e1.pass);
-        fclose(loginFile);
-    }
-
+    saveEmployeesToFile();
     printf("\nEmployee added successfully!");
 }
 
 void viewEmployeeList()
 {
-    FILE *file = fopen("employees.txt", "r");
-    if (file == NULL)
+    if (!employeeList)
     {
         printf("\nNo employees found!");
         return;
@@ -175,65 +228,47 @@ void viewEmployeeList()
     printf("| %-20s | %-15s | %-15s |\n", "Name", "ID", "Department");
     printf("|------------------------------------------------------|\n");
 
-    Employee e1;
-    while (fscanf(file, "%s %s %s %s", e1.name, e1.id, e1.course, e1.dept) == 4)
+    Employee *current = employeeList;
+    while (current)
     {
-        printf("| %-20s | %-15s | %-15s |\n", e1.name, e1.id, e1.dept);
+        printf("| %-20s | %-15s | %-15s |\n",
+               current->name, current->id, current->dept);
+        current = current->next;
     }
     printf("|------------------------------------------------------|\n");
-    fclose(file);
 }
 
 void removeEmployee()
 {
-    char empID[20];
+    char empID[15];
     printf("\nEnter Employee ID to remove: ");
-    scanf("%19s", empID);
+    scanf("%14s", empID);
 
-    FILE *file = fopen("employees.txt", "r");
-    if (file == NULL)
+    Employee *current = employeeList, *prev = NULL;
+    while (current)
     {
-        printf("\nNo employees found!");
-        return;
-    }
-
-    FILE *tempFile = fopen("temp.txt", "w");
-    if (tempFile == NULL)
-    {
-        fclose(file);
-        return;
-    }
-
-    Employee e1;
-    int found = 0;
-    while (fscanf(file, "%s %s %s %s", e1.name, e1.id, e1.course, e1.dept) == 4)
-    {
-        if (strcmp(e1.id, empID) != 0)
+        if (strcmp(current->id, empID) == 0)
         {
-            fprintf(tempFile, "%s %s %s %s\n", e1.name, e1.id, e1.course, e1.dept);
+            if (prev)
+            {
+                prev->next = current->next;
+            }
+            else
+            {
+                employeeList = current->next;
+            }
+            free(current);
+            saveEmployeesToFile();
+            printf("\nEmployee removed successfully!");
+            return;
         }
-        else
-        {
-            found = 1;
-        }
+        prev = current;
+        current = current->next;
     }
-
-    fclose(file);
-    fclose(tempFile);
-
-    if (found)
-    {
-        remove("employees.txt");
-        rename("temp.txt", "employees.txt");
-        printf("\nEmployee removed successfully!");
-    }
-    else
-    {
-        remove("temp.txt");
-        printf("\nEmployee not found!");
-    }
+    printf("\nEmployee not found!");
 }
 
+// Course management
 void addNewCourse()
 {
     if (courseCount >= MAX_COURSES)
@@ -262,7 +297,9 @@ void viewAllCourse()
 
     for (int i = 0; i < courseCount; i++)
     {
-        printf("| %-20s | %-15s | %3d/%-3d |\n", courses[i].name, courses[i].courseFaculty, courses[i].currentEnrollment, courses[i].maxEnrollment);
+        printf("| %-20s | %-15s | %3d/%-3d |\n",
+               courses[i].name, courses[i].courseFaculty,
+               courses[i].currentEnrollment, courses[i].maxEnrollment);
     }
     printf("|---------------------------------------------|\n");
 }
@@ -273,7 +310,6 @@ void deleteACourse()
     printf("\nEnter course name to delete: ");
     scanf("%24s", courseName);
 
-    int found = 0;
     for (int i = 0; i < courseCount; i++)
     {
         if (strcmp(courses[i].name, courseName) == 0)
@@ -283,22 +319,15 @@ void deleteACourse()
                 courses[j] = courses[j + 1];
             }
             courseCount--;
-            found = 1;
-            break;
+            saveCourses();
+            printf("\nCourse deleted successfully!");
+            return;
         }
     }
-
-    if (found)
-    {
-        saveCourses();
-        printf("\nCourse deleted successfully!");
-    }
-    else
-    {
-        printf("\nCourse not found!");
-    }
+    printf("\nCourse not found!");
 }
 
+// Student management
 void EnrollStudent()
 {
     Student s;
@@ -349,24 +378,27 @@ void EnrollStudent()
 void viewWaitlistedStudent()
 {
     FILE *file = fopen("waitlist.txt", "r");
-    if (file == NULL)
+    if (!file)
     {
         printf("\nNo waitlisted students found!");
         return;
     }
 
     printf("\n|---------------- Waitlisted Students ----------------|\n");
-    printf("| %-20s | %-15s | %-15s | %-15s |\n", "Name", "ID", "Department", "Course");
+    printf("| %-20s | %-15s | %-15s | %-15s |\n",
+           "Name", "ID", "Department", "Course");
     printf("|-----------------------------------------------------|\n");
 
     WaitlistedStudent w;
     while (fscanf(file, "%s %s %s %s", w.name, w.id, w.dept, w.course) == 4)
     {
-        printf("| %-20s | %-15s | %-15s | %-15s |\n", w.name, w.id, w.dept, w.course);
+        printf("| %-20s | %-15s | %-15s | %-15s |\n",
+               w.name, w.id, w.dept, w.course);
     }
     printf("|-----------------------------------------------------|\n");
     fclose(file);
 }
+
 void processWaitlist()
 {
     FILE *waitlist = fopen("waitlist.txt", "r");
@@ -399,7 +431,8 @@ void processWaitlist()
                 FILE *studentFile = fopen("students.txt", "a");
                 if (studentFile)
                 {
-                    fprintf(studentFile, "%s %s %s %s\n", w.name, w.id, w.dept, w.course);
+                    fprintf(studentFile, "%s %s %s %s\n",
+                            w.name, w.id, w.dept, w.course);
                     fclose(studentFile);
                 }
 
@@ -413,7 +446,8 @@ void processWaitlist()
 
         if (!enrolled)
         {
-            fprintf(tempWaitlist, "%s %s %s %s\n", w.name, w.id, w.dept, w.course);
+            fprintf(tempWaitlist, "%s %s %s %s\n",
+                    w.name, w.id, w.dept, w.course);
         }
     }
 
@@ -425,6 +459,8 @@ void processWaitlist()
 
     printf("\nEnrolled %d students from waitlist!", processed);
 }
+
+// Interfaces
 void adminInterface()
 {
     int choice;
@@ -445,7 +481,6 @@ void adminInterface()
         printf("\n| 0. Logout                                   |");
         printf("\n------------------------------------------------");
         printf("\nEnter your choice: ");
-
         scanf("%d", &choice);
         while (getchar() != '\n')
             ;
@@ -502,7 +537,6 @@ void employeeInterface()
         printf("\n| 0. Logout                                  |");
         printf("\n----------------------------------------------");
         printf("\nEnter your choice: ");
-
         scanf("%d", &choice);
         while (getchar() != '\n')
             ;
@@ -540,7 +574,6 @@ void guestInterface()
         printf("\n| 0. Return to Main Menu                  |");
         printf("\n--------------------------------------------");
         printf("\nEnter your choice: ");
-
         scanf("%d", &choice);
         while (getchar() != '\n')
             ;
@@ -592,9 +625,7 @@ void mainInterface()
             clearScreen();
             printf("\n----------- ADMIN LOGIN -----------");
             printf("\nUsername: ");
-            scanf("%19[^\n]", name);
-            while (getchar() != '\n')
-                ;
+            scanf("%19s", name);
             printf("Password: ");
             scanf("%d", &password);
             while (getchar() != '\n')
@@ -650,6 +681,11 @@ void mainInterface()
 int main()
 {
     loadCourses();
+    loadEmployeesFromFile();
+
     mainInterface();
+
+    saveEmployeesToFile();
+    freeEmployeeList();
     return 0;
 }
