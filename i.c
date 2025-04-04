@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+
 #define MAX_COURSES 10
 
 char admin[] = "admin";
